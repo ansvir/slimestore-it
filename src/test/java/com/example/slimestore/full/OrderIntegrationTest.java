@@ -7,6 +7,7 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,7 +73,13 @@ class OrderIntegrationTest {
         DefaultKafkaConsumerFactory<String, String> cf = new DefaultKafkaConsumerFactory<>(consumerProps);
         consumer = cf.createConsumer();
         consumer.subscribe(Collections.singleton(ORDERS_TOPIC));
-        consumer.poll(Duration.ofMillis(100)); // Ensure consumer is ready
+    }
+
+    @AfterEach
+    void tearDownKafkaConsumer() {
+        if (consumer != null) {
+            consumer.close();
+        }
     }
 
     @Test
