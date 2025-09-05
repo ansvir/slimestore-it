@@ -1,0 +1,1 @@
+INSERT INTO orders (id, customer_name) VALUES (999, 'Cancelled Customer');
