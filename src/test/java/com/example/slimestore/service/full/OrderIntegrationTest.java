@@ -1,8 +1,10 @@
-package com.example.slimestore.full;
+package com.example.slimestore.service.full;
 
 import com.example.slimestore.jpa.Order;
 import com.example.slimestore.jpa.Product;
 import com.example.slimestore.repository.OrderRepository;
+import com.example.slimestore.repository.OutboxMessageRepository;
+import com.example.slimestore.scheduler.OutboxRelayerScheduler;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Description;
@@ -31,8 +34,6 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Duration;
 import java.util.*;
 
-import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_CREATED;
-import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_DELETED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -42,10 +43,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class OrderIntegrationTest {
 
     private static final String ORDERS_TOPIC = "orders";
+    private static final String KAFKA_IMAGE = "confluentinc/cp-kafka:6.2.1";
     private static final String KAFKA_SERVERS = "spring.kafka.bootstrap-servers";
 
+    @Value("${app.outbox.delay}")
+    private int outboxDelay;
+
     @Container
-    public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.1"));
+    public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse(KAFKA_IMAGE));
 
     @DynamicPropertySource
     static void kafkaProperties(DynamicPropertyRegistry registry) {
@@ -56,12 +61,15 @@ class OrderIntegrationTest {
     private TestRestTemplate restTemplate;
 
     @Autowired
+    private OutboxRelayerScheduler outboxRelayerScheduler;
+
+    @Autowired
     private OrderRepository orderRepository;
 
     private Consumer<String, String> consumer;
 
     @BeforeEach
-    void setupKafkaConsumer() {
+    void init() {
         var groupName = "test-group";
         var resetPolicy = "earliest";
         Map<String, Object> consumerProps = new HashMap<>();
@@ -77,7 +85,7 @@ class OrderIntegrationTest {
     }
 
     @AfterEach
-    void tearDownKafkaConsumer() {
+    void tearDown() {
         if (consumer != null) {
             consumer.close();
         }
@@ -90,16 +98,17 @@ class OrderIntegrationTest {
         Order order = new Order();
         order.setCustomerName("Ivan Ivanov");
         List<Product> items = Arrays.asList(
-                createPosition("Galaxy Slime", 1),
-                createPosition("Glitter Slime", 2),
-                createPosition("Cloud Slime", 1),
-                createPosition("Fluffy Slime", 3),
-                createPosition("Butter Slime", 1)
+                createProduct("Galaxy Slime", 1),
+                createProduct("Glitter Slime", 2),
+                createProduct("Cloud Slime", 1),
+                createProduct("Fluffy Slime", 3),
+                createProduct("Butter Slime", 1)
         );
         order.setProducts(items);
 
         // WHEN
         ResponseEntity<Order> response = restTemplate.postForEntity("/api/orders", order, Order.class);
+        outboxRelayerScheduler.processOutboxMessages();
 
         // THEN
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -111,10 +120,10 @@ class OrderIntegrationTest {
         assertThat(dbOrder).isPresent();
         assertThat(dbOrder.get().getProducts()).hasSize(items.size());
 
-        ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
+        ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(outboxDelay));
         assertThat(records.count()).isEqualTo(1);
         String message = records.iterator().next().value();
-        assertThat(message).contains(ORDER_CREATED.name());
+        assertThat(message).contains(Order.OrderStatus.ORDER_CREATED.name());
         assertThat(message).contains(createdOrder.getId().toString());
     }
 
@@ -129,8 +138,9 @@ class OrderIntegrationTest {
         ResponseEntity<Void> deleteResponse = restTemplate.exchange(
                 "/api/orders/" + orderId, HttpMethod.DELETE, null, Void.class
         );
+        outboxRelayerScheduler.processOutboxMessages();
 
-        // THEN (Verify HTTP, DB, and Kafka)
+        // THEN
         assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 
         ResponseEntity<Order> getResponse = restTemplate.getForEntity(
@@ -138,10 +148,10 @@ class OrderIntegrationTest {
         );
         assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 
-        ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
+        ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(outboxDelay));
         assertThat(records.count()).isEqualTo(1);
         String message = records.iterator().next().value();
-        assertThat(message).contains(ORDER_DELETED.name());
+        assertThat(message).contains(Order.OrderStatus.ORDER_DELETED.name());
         assertThat(message).contains(Long.toString(orderId));
     }
 
@@ -160,11 +170,10 @@ class OrderIntegrationTest {
         assertThat(response.getBody().size()).isEqualTo(2);
     }
 
-    private Product createPosition(String itemName, int quantity) {
+    private Product createProduct(String itemName, int quantity) {
         Product product = new Product();
         product.setName(itemName);
         product.setQuantity(quantity);
         return product;
     }
-
 }

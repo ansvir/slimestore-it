@@ -1,4 +1,4 @@
-package com.example.slimestore.slices;
+package com.example.slimestore.service.slices;
 
 import com.example.slimestore.jpa.Order;
 import com.example.slimestore.jpa.Product;
