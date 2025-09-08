@@ -18,12 +18,10 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
-import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -33,6 +31,8 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Duration;
 import java.util.*;
 
+import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_CREATED;
+import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_DELETED;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -42,15 +42,14 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class OrderIntegrationTest {
 
     private static final String ORDERS_TOPIC = "orders";
-    private static final String ORDER_CREATED_STATUS = "ORDER_CREATED";
-    private static final String ORDER_DELETED_STATUS = "ORDER_DELETED";
+    private static final String KAFKA_SERVERS = "spring.kafka.bootstrap-servers";
 
     @Container
     public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:6.2.1"));
 
     @DynamicPropertySource
     static void kafkaProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+        registry.add(KAFKA_SERVERS, kafka::getBootstrapServers);
     }
 
     @Autowired
@@ -63,10 +62,12 @@ class OrderIntegrationTest {
 
     @BeforeEach
     void setupKafkaConsumer() {
+        var groupName = "test-group";
+        var resetPolicy = "earliest";
         Map<String, Object> consumerProps = new HashMap<>();
         consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
-        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, "test-group");
-        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, groupName);
+        consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, resetPolicy);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 
@@ -113,7 +114,7 @@ class OrderIntegrationTest {
         ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
         assertThat(records.count()).isEqualTo(1);
         String message = records.iterator().next().value();
-        assertThat(message).contains(ORDER_CREATED_STATUS);
+        assertThat(message).contains(ORDER_CREATED.name());
         assertThat(message).contains(createdOrder.getId().toString());
     }
 
@@ -140,7 +141,7 @@ class OrderIntegrationTest {
         ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
         assertThat(records.count()).isEqualTo(1);
         String message = records.iterator().next().value();
-        assertThat(message).contains(ORDER_DELETED_STATUS);
+        assertThat(message).contains(ORDER_DELETED.name());
         assertThat(message).contains(Long.toString(orderId));
     }
 

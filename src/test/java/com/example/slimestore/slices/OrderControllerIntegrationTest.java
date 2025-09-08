@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Description;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +35,7 @@ class OrderControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Test
+    @Description("given order when created then 201 expected")
     void testCreateOrderEndpoint() throws Exception {
         // GIVEN
         Order newOrder = new Order();
@@ -53,7 +55,7 @@ class OrderControllerIntegrationTest {
         mockMvc.perform(post("/api/orders")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(newOrder)))
-                .andExpect(status().isCreated()) // HTTP 201 Created
+                .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.customerName").value("Ivan Ivanov"));
 
@@ -61,6 +63,7 @@ class OrderControllerIntegrationTest {
     }
 
     @Test
+    @Description("given order when deleted then 204 expected")
     void testDeleteOrderEndpoint() throws Exception {
         // GIVEN
         Long orderId = 1L;
@@ -68,12 +71,13 @@ class OrderControllerIntegrationTest {
 
         // WHEN & THEN
         mockMvc.perform(delete("/api/orders/{id}", orderId))
-                .andExpect(status().isNoContent()); // HTTP 204 No Content
+                .andExpect(status().isNoContent());
 
         verify(orderService, times(1)).deleteOrder(orderId);
     }
 
     @Test
+    @Description("given order when found by filter then 200 expected")
     void testFindOrderByFilterEndpoint() throws Exception {
         // GIVEN
         String itemName = "Cloud Slime";

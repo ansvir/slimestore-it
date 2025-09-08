@@ -1,13 +1,13 @@
 package com.example.slimestore.slices;
 
+import com.example.slimestore.SlimestoreApplication;
 import com.example.slimestore.jpa.Order;
 import com.example.slimestore.repository.OrderRepository;
 import com.example.slimestore.service.OrderService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Description;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -19,25 +19,27 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
+import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_CREATED;
+import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_DELETED;
+import static com.example.slimestore.util.OrderUtil.buildOrderStatusMessage;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @Testcontainers
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = { OrderService.class, KafkaTemplate.class })
+@ContextConfiguration(classes = { SlimestoreApplication.class })
 public class OrderKafkaIntegrationTest {
 
     private static final String ORDERS_TOPIC = "orders";
     private static final String KAFKA_IMAGE = "confluentinc/cp-kafka:6.2.1";
-    private static final String ORDER_CREATED = "ORDER_CREATED";
-    private static final String ORDER_DELETED = "ORDER_DELETED";
+    private static final String KAFKA_SERVERS = "spring.kafka.bootstrap-servers";
 
     @Container
     public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse(KAFKA_IMAGE));
 
     @DynamicPropertySource
     static void kafkaProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+        registry.add(KAFKA_SERVERS, kafka::getBootstrapServers);
     }
 
     @MockitoBean
@@ -46,10 +48,11 @@ public class OrderKafkaIntegrationTest {
     @Autowired
     private OrderService orderService;
 
-    @Autowired
+    @MockitoBean
     private KafkaTemplate<String, String> kafkaTemplate;
 
     @Test
+    @Description("given order when created then created status kafka message added to topic")
     void whenCreateOrder_thenKafkaMessageIsSent() {
         // GIVEN
         Long orderId = 1L;
@@ -65,6 +68,7 @@ public class OrderKafkaIntegrationTest {
     }
 
     @Test
+    @Description("given order when deleted then deleted status kafka message added to topic")
     void whenDeleteOrder_thenKafkaMessageIsSent() {
         // GIVEN
         Long orderId = 1L;
@@ -75,9 +79,5 @@ public class OrderKafkaIntegrationTest {
 
         // THEN
         verify(kafkaTemplate).send(ORDERS_TOPIC, buildOrderStatusMessage(ORDER_DELETED, orderId));
-    }
-
-    private String buildOrderStatusMessage(String status, Long orderId) {
-        return String.format("%s:%s", status, orderId);
     }
 }
