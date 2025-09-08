@@ -51,6 +51,8 @@ class OrderIntegrationTest {
 
     @Container
     public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse(KAFKA_IMAGE));
+    @Autowired
+    private OutboxMessageRepository outboxMessageRepository;
 
     @DynamicPropertySource
     static void kafkaProperties(DynamicPropertyRegistry registry) {
@@ -82,6 +84,8 @@ class OrderIntegrationTest {
         DefaultKafkaConsumerFactory<String, String> cf = new DefaultKafkaConsumerFactory<>(consumerProps);
         consumer = cf.createConsumer();
         consumer.subscribe(Collections.singleton(ORDERS_TOPIC));
+
+        outboxMessageRepository.deleteAll();
     }
 
     @AfterEach
