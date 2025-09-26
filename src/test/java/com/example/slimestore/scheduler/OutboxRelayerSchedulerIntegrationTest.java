@@ -11,10 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -40,9 +38,6 @@ class OutboxRelayerSchedulerIntegrationTest {
     private static final String ORDERS_TOPIC = "orders";
     private static final String KAFKA_IMAGE = "confluentinc/cp-kafka:6.2.1";
     private static final String KAFKA_SERVERS = "spring.kafka.bootstrap-servers";
-
-    @Value("${app.outbox.delay}")
-    private int outboxDelay;
 
     @Container
     public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse(KAFKA_IMAGE));

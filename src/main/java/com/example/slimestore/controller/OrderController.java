@@ -1,6 +1,8 @@
 package com.example.slimestore.controller;
 
 import com.example.slimestore.jpa.Order;
+import com.example.slimestore.mapper.order.OrderMapper;
+import com.example.slimestore.model.order.OrderDto;
 import com.example.slimestore.service.OrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -23,6 +25,7 @@ import java.util.Optional;
 public class OrderController {
 
     private final OrderService orderService;
+    private final OrderMapper orderMapper;
 
     /**
      * Creates a new slime order.
@@ -35,9 +38,10 @@ public class OrderController {
             @ApiResponse(responseCode = "400", description = "Invalid request body")
     })
     @PostMapping
-    public ResponseEntity<Order> createOrder(@RequestBody Order order) {
+    public ResponseEntity<OrderDto> createOrder(@RequestBody Order order) {
         Order newOrder = orderService.createOrder(order);
-        return new ResponseEntity<>(newOrder, HttpStatus.CREATED);
+        OrderDto orderResponse = orderMapper.toDto(newOrder);
+        return new ResponseEntity<>(orderResponse, HttpStatus.CREATED);
     }
 
     /**
@@ -67,9 +71,10 @@ public class OrderController {
             @ApiResponse(responseCode = "404", description = "Order not found")
     })
     @GetMapping("/{id}")
-    public ResponseEntity<Order> getOrderById(@PathVariable Long id) {
+    public ResponseEntity<OrderDto> getOrderById(@PathVariable Long id) {
         Optional<Order> order = orderService.getOrderById(id);
-        return order.map(ResponseEntity::ok)
+        return order.map(orderMapper::toDto)
+                .map(ResponseEntity::ok)
                 .orElseGet(() -> new ResponseEntity<>(HttpStatus.NOT_FOUND));
     }
 
@@ -84,8 +89,11 @@ public class OrderController {
             @ApiResponse(responseCode = "400", description = "Invalid search parameter")
     })
     @GetMapping("/search")
-    public ResponseEntity<List<Order>> findByItemName(@RequestParam String itemName) {
-        List<Order> orders = orderService.findByProductName(itemName);
+    public ResponseEntity<List<OrderDto>> findByItemName(@RequestParam String itemName) {
+        List<OrderDto> orders = orderService.findByProductName(itemName)
+                .stream()
+                .map(orderMapper::toDto)
+                .toList();
         return new ResponseEntity<>(orders, HttpStatus.OK);
     }
 }

@@ -1,7 +1,7 @@
-package com.example.slimestore.service.slices;
+package com.example.slimestore.controller;
 
-import com.example.slimestore.controller.OrderController;
 import com.example.slimestore.jpa.Order;
+import com.example.slimestore.jpa.OrderProduct;
 import com.example.slimestore.jpa.Product;
 import com.example.slimestore.service.OrderService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,9 +12,9 @@ import org.springframework.context.annotation.Description;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -40,21 +40,19 @@ class OrderControllerIntegrationTest {
         // GIVEN
         Order newOrder = new Order();
         newOrder.setCustomerName("Ivan Ivanov");
-        newOrder.setProducts(Arrays.asList(
-            createProduct("Galaxy Slime", 1),
-            createProduct("Glitter Slime", 2)
-        ));
+        newOrder.setOrderProducts(createOrderProducts("Galaxy Slime", 1));
 
         Order savedOrder = new Order();
         savedOrder.setId(1L);
         savedOrder.setCustomerName(newOrder.getCustomerName());
-        savedOrder.setProducts(newOrder.getProducts());
+        savedOrder.setOrderProducts(newOrder.getOrderProducts());
+
         when(orderService.createOrder(any(Order.class))).thenReturn(savedOrder);
 
         // WHEN & THEN
         mockMvc.perform(post("/api/orders")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(newOrder)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(newOrder)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.customerName").value("Ivan Ivanov"));
@@ -84,18 +82,18 @@ class OrderControllerIntegrationTest {
         Order order1 = new Order();
         order1.setId(1L);
         order1.setCustomerName("Bob");
-        order1.setProducts(Collections.singletonList(createProduct(itemName, 2)));
+        order1.setOrderProducts(createOrderProducts(itemName, 2));
 
         Order order2 = new Order();
         order2.setId(2L);
         order2.setCustomerName("Dave");
-        order2.setProducts(Collections.singletonList(createProduct(itemName, 1)));
+        order2.setOrderProducts(createOrderProducts(itemName, 1));
 
         when(orderService.findByProductName(itemName)).thenReturn(Arrays.asList(order1, order2));
 
         // WHEN & THEN
         mockMvc.perform(get("/api/orders/search")
-                .param("itemName", itemName))
+                        .param("itemName", itemName))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.size()").value(2))
                 .andExpect(jsonPath("$[0].customerName").value("Bob"))
@@ -103,11 +101,17 @@ class OrderControllerIntegrationTest {
 
         verify(orderService, times(1)).findByProductName(itemName);
     }
-    
-    private Product createProduct(String name, int quantity) {
+
+    private List<OrderProduct> createOrderProducts(String productName, int quantity) {
+        OrderProduct item = new OrderProduct();
+        item.setProduct(createProduct(productName));
+        item.setQuantity(quantity);
+        return Collections.singletonList(item);
+    }
+
+    private Product createProduct(String name) {
         Product product = new Product();
         product.setName(name);
-        product.setQuantity(quantity);
         return product;
     }
 }

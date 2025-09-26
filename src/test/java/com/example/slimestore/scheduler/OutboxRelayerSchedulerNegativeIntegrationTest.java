@@ -44,11 +44,7 @@ class OutboxRelayerSchedulerNegativeIntegrationTest {
         long id = 1L;
         String payload = OrderUtil.buildOrderStatusMessage(ORDER_CREATED, id);
         OutboxMessage message = createOutboxMessage(id, payload);
-
-        // Use the injected mock from the field, not a new one
         when(outboxMessageRepository.findAll()).thenReturn(List.of(message));
-
-        // Configure the INJECTED mock to throw an exception
         doThrow(new RuntimeException("Kafka Broker is down")).when(kafkaTemplate).send(any(), any());
         doNothing().when(outboxMessageRepository).delete(any());
 
@@ -56,10 +52,8 @@ class OutboxRelayerSchedulerNegativeIntegrationTest {
         outboxRelayerScheduler.processOutboxMessages();
 
         // THEN
-        // Verify the INJECTED mock
         verify(kafkaTemplate, times(1)).send(message.getTopic(), message.getPayload());
         verify(outboxMessageRepository, never()).delete(any());
-        // Verify the message is still in the outbox
         when(outboxMessageRepository.findById(id)).thenReturn(Optional.of(message));
         assertThat(outboxMessageRepository.findById(id)).isPresent();
     }

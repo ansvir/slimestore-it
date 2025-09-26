@@ -1,7 +1,9 @@
-package com.example.slimestore.service.full;
+package com.example.slimestore.service;
 
 import com.example.slimestore.jpa.Order;
+import com.example.slimestore.jpa.OrderProduct;
 import com.example.slimestore.jpa.Product;
+import com.example.slimestore.model.order.OrderDto;
 import com.example.slimestore.repository.OrderRepository;
 import com.example.slimestore.repository.OutboxMessageRepository;
 import com.example.slimestore.scheduler.OutboxRelayerScheduler;
@@ -17,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Description;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +30,7 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
@@ -40,33 +44,42 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 @Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @Transactional
-class OrderIntegrationTest {
+class OrderServiceIntegrationTest {
 
     private static final String ORDERS_TOPIC = "orders";
     private static final String KAFKA_IMAGE = "confluentinc/cp-kafka:6.2.1";
-    private static final String KAFKA_SERVERS = "spring.kafka.bootstrap-servers";
+    private static final String POSTGRES_IMAGE = "postgres:13";
 
     @Value("${app.outbox.delay}")
     private int outboxDelay;
 
     @Container
     public static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse(KAFKA_IMAGE));
+
+    @Container
+    public static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(POSTGRES_IMAGE);
+
     @Autowired
     private OutboxMessageRepository outboxMessageRepository;
-
-    @DynamicPropertySource
-    static void kafkaProperties(DynamicPropertyRegistry registry) {
-        registry.add(KAFKA_SERVERS, kafka::getBootstrapServers);
-    }
-
+    @Autowired
+    private OrderRepository orderRepository;
+    @Autowired
+    private OutboxRelayerScheduler outboxRelayerScheduler;
     @Autowired
     private TestRestTemplate restTemplate;
 
-    @Autowired
-    private OutboxRelayerScheduler outboxRelayerScheduler;
+    @DynamicPropertySource
+    static void kafkaProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+    }
 
-    @Autowired
-    private OrderRepository orderRepository;
+    @DynamicPropertySource
+    static void configurePostgres(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", postgres::getJdbcUrl);
+        registry.add("spring.datasource.username", postgres::getUsername);
+        registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
+    }
 
     private Consumer<String, String> consumer;
 
@@ -80,7 +93,6 @@ class OrderIntegrationTest {
         consumerProps.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, resetPolicy);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-
         DefaultKafkaConsumerFactory<String, String> cf = new DefaultKafkaConsumerFactory<>(consumerProps);
         consumer = cf.createConsumer();
         consumer.subscribe(Collections.singleton(ORDERS_TOPIC));
@@ -101,28 +113,22 @@ class OrderIntegrationTest {
         // GIVEN
         Order order = new Order();
         order.setCustomerName("Ivan Ivanov");
-        List<Product> items = Arrays.asList(
-                createProduct("Galaxy Slime", 1),
-                createProduct("Glitter Slime", 2),
-                createProduct("Cloud Slime", 1),
-                createProduct("Fluffy Slime", 3),
-                createProduct("Butter Slime", 1)
-        );
-        order.setProducts(items);
+        order.setOrderProducts(createOrderProducts(order,
+                "Galaxy Slime", 1, "Glitter Slime", 2, "Cloud Slime", 1, "Fluffy Slime", 3, "Butter Slime", 1));
 
         // WHEN
-        ResponseEntity<Order> response = restTemplate.postForEntity("/api/orders", order, Order.class);
+        ResponseEntity<OrderDto> response = restTemplate.postForEntity("/api/orders", order, OrderDto.class);
         outboxRelayerScheduler.processOutboxMessages();
 
         // THEN
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertNotNull(response.getBody());
-        Order createdOrder = response.getBody();
+        OrderDto createdOrder = response.getBody();
         assertNotNull(createdOrder.getId());
 
         Optional<Order> dbOrder = orderRepository.findById(createdOrder.getId());
         assertThat(dbOrder).isPresent();
-        assertThat(dbOrder.get().getProducts()).hasSize(items.size());
+        assertThat(dbOrder.get().getOrderProducts()).hasSize(5);
 
         ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(outboxDelay));
         assertThat(records.count()).isEqualTo(1);
@@ -164,8 +170,11 @@ class OrderIntegrationTest {
     @Description("given order filter when apply filter then specific orders found")
     void testFindOrderByFilter() {
         // GIVEN && WHEN
-        ResponseEntity<List> response = restTemplate.getForEntity(
-                "/api/orders/search?itemName=Cloud Slime", List.class
+        ResponseEntity<List<OrderDto>> response = restTemplate.exchange(
+                "/api/orders/search?itemName=Cloud Slime",
+                HttpMethod.GET,
+                null,
+                new ParameterizedTypeReference<>() {}
         );
 
         // THEN
@@ -174,10 +183,20 @@ class OrderIntegrationTest {
         assertThat(response.getBody().size()).isEqualTo(2);
     }
 
-    private Product createProduct(String itemName, int quantity) {
-        Product product = new Product();
-        product.setName(itemName);
-        product.setQuantity(quantity);
-        return product;
+    private List<OrderProduct> createOrderProducts(Order order, Object... args) {
+        List<OrderProduct> items = new ArrayList<>();
+        for (int i = 0; i < args.length; i += 2) {
+            String productName = (String) args[i];
+            int quantity = (Integer) args[i + 1];
+
+            Product product = new Product();
+            product.setName(productName);
+            OrderProduct item = new OrderProduct();
+            item.setOrder(order);
+            item.setProduct(product);
+            item.setQuantity(quantity);
+            items.add(item);
+        }
+        return items;
     }
 }

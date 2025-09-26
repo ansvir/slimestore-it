@@ -1,37 +1,51 @@
-package com.example.slimestore.service.slices;
+package com.example.slimestore.service;
 
 import com.example.slimestore.jpa.Order;
 import com.example.slimestore.jpa.OutboxMessage;
+import com.example.slimestore.jpa.OrderProduct;
+import com.example.slimestore.jpa.Product;
 import com.example.slimestore.repository.OrderRepository;
 import com.example.slimestore.repository.OutboxMessageRepository;
-import com.example.slimestore.service.OrderService;
+import com.example.slimestore.repository.ProductRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.context.annotation.Description;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.transaction.TestTransaction;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.Optional;
 
 import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_CREATED;
 import static com.example.slimestore.jpa.Order.OrderStatus.ORDER_DELETED;
 import static com.example.slimestore.util.OrderUtil.buildOrderStatusMessage;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @DataJpaTest
-@Import({ OrderService.class })
+@Import(OrderService.class)
 @Transactional
-class OrderKafkaIntegrationTest {
+class OrderServiceKafkaIntegrationTest {
 
     @Autowired
     private OrderService orderService;
-
     @Autowired
     private OrderRepository orderRepository;
-
     @Autowired
     private OutboxMessageRepository outboxMessageRepository;
+    @Autowired
+    private ProductRepository productRepository;
+
+    @BeforeEach
+    void setupCatalogProducts() {
+        productRepository.save(createCatalogProduct("Test Slime"));
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+        TestTransaction.start();
+    }
 
     @Test
     @Description("given order when created then created status message saved to outbox table")
@@ -39,13 +53,14 @@ class OrderKafkaIntegrationTest {
         // GIVEN
         Order newOrder = new Order();
         newOrder.setCustomerName("Test Customer");
+        newOrder.setOrderProducts(Collections.singletonList(createOrderProduct(newOrder, "Test Slime", 1)));
 
         // WHEN
         Order savedOrder = orderService.createOrder(newOrder);
 
         // THEN
-        assertThat(savedOrder).isNotNull();
-        assertThat(savedOrder.getId()).isNotNull();
+        assertNotNull(savedOrder);
+        assertNotNull(savedOrder.getId());
 
         assertThat(orderRepository.findById(savedOrder.getId())).isPresent();
         assertThat(outboxMessageRepository.findAll()).hasSize(1);
@@ -61,6 +76,7 @@ class OrderKafkaIntegrationTest {
         // GIVEN
         Order orderToDelete = new Order();
         orderToDelete.setCustomerName("Customer for deletion");
+        orderToDelete.setOrderProducts(Collections.singletonList(createOrderProduct(orderToDelete, "Test Slime", 1)));
         Order savedOrder = orderRepository.save(orderToDelete);
         Long orderId = savedOrder.getId();
 
@@ -74,5 +90,21 @@ class OrderKafkaIntegrationTest {
                 .findFirst();
         assertThat(outboxMessage).isPresent();
         assertThat(outboxMessage.get().getPayload()).contains(buildOrderStatusMessage(ORDER_DELETED, orderId));
+    }
+
+    private Product createCatalogProduct(String name) {
+        Product product = new Product();
+        product.setName(name);
+        return product;
+    }
+
+    private OrderProduct createOrderProduct(Order order, String productName, int quantity) {
+        OrderProduct item = new OrderProduct();
+        Product product = productRepository.findByName(productName)
+                .orElseThrow();
+        item.setOrder(order);
+        item.setProduct(product);
+        item.setQuantity(quantity);
+        return item;
     }
 }

@@ -1,16 +1,20 @@
 package com.example.slimestore.jpa;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.util.List;
 
 /**
  * Represents a customer order in the SlimeStore.
- * An order contains information about the customer and a list of products.
  */
 @Entity
 @Data
 @Table(name = "orders")
+@AllArgsConstructor
+@NoArgsConstructor
 public class Order {
 
     /**
@@ -27,20 +31,11 @@ public class Order {
     private String customerName;
 
     /**
-     * A list of products included in this order.
-     * The relationship is a one-to-many from Order to Product.
-     * All operations (e.g., cascade, orphan removal) are applied to the products.
+     * A list of items included in this order.
      */
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "order_id")
-    private List<Product> products;
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<OrderProduct> orderProducts;
 
-    /**
-     * An enumeration of the possible statuses for an order.
-     * <p>
-     * - {@link #ORDER_CREATED}: The order has been successfully created.
-     * - {@link #ORDER_DELETED}: The order has been deleted.
-     */
     public enum OrderStatus {
         ORDER_CREATED, ORDER_DELETED
     }
