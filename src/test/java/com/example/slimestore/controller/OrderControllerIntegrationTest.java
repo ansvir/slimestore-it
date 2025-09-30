@@ -3,13 +3,19 @@ package com.example.slimestore.controller;
 import com.example.slimestore.jpa.Order;
 import com.example.slimestore.jpa.OrderProduct;
 import com.example.slimestore.jpa.Product;
+import com.example.slimestore.mapper.order.OrderMapper;
+import com.example.slimestore.mapper.order.OrderMapperImpl;
+import com.example.slimestore.mapper.orderproduct.OrderProductMapperImpl;
+import com.example.slimestore.mapper.product.ProductMapperImpl;
 import com.example.slimestore.service.OrderService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Description;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import java.util.Arrays;
@@ -23,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(OrderController.class)
+@Import(value = { OrderMapperImpl.class, OrderProductMapperImpl.class, ProductMapperImpl.class })
 class OrderControllerIntegrationTest {
 
     @Autowired
@@ -34,25 +41,28 @@ class OrderControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private OrderMapper orderMapper;
+
     @Test
     @Description("given order when created then 201 expected")
     void testCreateOrderEndpoint() throws Exception {
         // GIVEN
-        Order newOrder = new Order();
-        newOrder.setCustomerName("Ivan Ivanov");
-        newOrder.setOrderProducts(createOrderProducts("Galaxy Slime", 1));
-
         Order savedOrder = new Order();
         savedOrder.setId(1L);
-        savedOrder.setCustomerName(newOrder.getCustomerName());
-        savedOrder.setOrderProducts(newOrder.getOrderProducts());
+        savedOrder.setCustomerName("Ivan Ivanov");
+        savedOrder.setOrderProducts(createMockOrderProducts("Galaxy Slime", 1));
 
         when(orderService.createOrder(any(Order.class))).thenReturn(savedOrder);
+
+        Order newOrder = new Order();
+        newOrder.setCustomerName("Ivan Ivanov");
+        newOrder.setOrderProducts(createMockOrderProducts("Galaxy Slime", 1));
 
         // WHEN & THEN
         mockMvc.perform(post("/api/orders")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(newOrder)))
+                        .content(objectMapper.writeValueAsString(orderMapper.toDto(newOrder))))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(1L))
                 .andExpect(jsonPath("$.customerName").value("Ivan Ivanov"));
@@ -82,12 +92,12 @@ class OrderControllerIntegrationTest {
         Order order1 = new Order();
         order1.setId(1L);
         order1.setCustomerName("Bob");
-        order1.setOrderProducts(createOrderProducts(itemName, 2));
+        order1.setOrderProducts(createMockOrderProducts(itemName, 2));
 
         Order order2 = new Order();
         order2.setId(2L);
         order2.setCustomerName("Dave");
-        order2.setOrderProducts(createOrderProducts(itemName, 1));
+        order2.setOrderProducts(createMockOrderProducts(itemName, 1));
 
         when(orderService.findByProductName(itemName)).thenReturn(Arrays.asList(order1, order2));
 
@@ -102,14 +112,14 @@ class OrderControllerIntegrationTest {
         verify(orderService, times(1)).findByProductName(itemName);
     }
 
-    private List<OrderProduct> createOrderProducts(String productName, int quantity) {
+    private List<OrderProduct> createMockOrderProducts(String productName, int quantity) {
         OrderProduct item = new OrderProduct();
-        item.setProduct(createProduct(productName));
+        item.setProduct(createMockProduct(productName));
         item.setQuantity(quantity);
         return Collections.singletonList(item);
     }
 
-    private Product createProduct(String name) {
+    private Product createMockProduct(String name) {
         Product product = new Product();
         product.setName(name);
         return product;

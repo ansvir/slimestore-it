@@ -9,9 +9,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -29,7 +31,7 @@ public class OrderController {
 
     /**
      * Creates a new slime order.
-     * @param order The order details.
+     * @param orderDto The order details.
      * @return The created order with a 201 Created status.
      */
     @Operation(summary = "Create a new order", description = "Adds a new order to the SlimeStore.")
@@ -38,7 +40,8 @@ public class OrderController {
             @ApiResponse(responseCode = "400", description = "Invalid request body")
     })
     @PostMapping
-    public ResponseEntity<OrderDto> createOrder(@RequestBody Order order) {
+    public ResponseEntity<OrderDto> createOrder(@RequestBody OrderDto orderDto) {
+        Order order = orderMapper.toEntity(orderDto);
         Order newOrder = orderService.createOrder(order);
         OrderDto orderResponse = orderMapper.toDto(newOrder);
         return new ResponseEntity<>(orderResponse, HttpStatus.CREATED);

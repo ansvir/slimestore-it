@@ -4,6 +4,7 @@ import com.example.slimestore.jpa.Order;
 import com.example.slimestore.jpa.OutboxMessage;
 import com.example.slimestore.repository.OrderRepository;
 import com.example.slimestore.repository.OutboxMessageRepository;
+import com.example.slimestore.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final OutboxMessageRepository outboxMessageRepository;
+    private final ProductRepository productRepository;
 
     /**
      * Creates a new order and saves a corresponding message to the outbox table.
@@ -37,6 +39,10 @@ public class OrderService {
      */
     @Transactional
     public Order createOrder(Order order) {
+        order.getOrderProducts()
+                .forEach(orderProduct -> orderProduct
+                        .setProduct(productRepository.save(orderProduct.getProduct())));
+        order.getOrderProducts().forEach(orderProduct -> orderProduct.setOrder(order));
         Order savedOrder = orderRepository.save(order);
 
         OutboxMessage outboxMessage = new OutboxMessage();

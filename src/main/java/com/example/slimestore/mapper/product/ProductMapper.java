@@ -4,9 +4,8 @@ import com.example.slimestore.jpa.Product;
 import com.example.slimestore.model.product.ProductDto;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
 
-@Mapper(componentModel = "spring")
+@Mapper
 public interface ProductMapper {
 
     ProductDto toDto(Product product);

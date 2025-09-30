@@ -5,9 +5,8 @@ import com.example.slimestore.mapper.product.ProductMapper;
 import com.example.slimestore.model.orderproduct.OrderProductDto;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
 
-@Mapper(componentModel = "spring", uses = { ProductMapper.class })
+@Mapper(uses = { ProductMapper.class })
 public interface OrderProductMapper {
 
     @Mapping(target = "product", source = "product")

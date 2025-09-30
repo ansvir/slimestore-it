@@ -32,6 +32,6 @@ public class Product {
     /**
      * A list of order products that this product belongs to.
      */
-    @OneToMany(mappedBy = "product")
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderProduct> orderProducts;
 }

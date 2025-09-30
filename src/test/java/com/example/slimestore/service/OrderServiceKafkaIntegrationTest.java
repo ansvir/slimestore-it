@@ -64,7 +64,9 @@ class OrderServiceKafkaIntegrationTest {
 
         assertThat(orderRepository.findById(savedOrder.getId())).isPresent();
         assertThat(outboxMessageRepository.findAll()).hasSize(1);
-        Optional<OutboxMessage> outboxMessage = outboxMessageRepository.findAll().stream().findFirst();
+        Optional<OutboxMessage> outboxMessage = outboxMessageRepository.findAll()
+                .stream()
+                .findFirst();
         assertThat(outboxMessage).isPresent();
         assertThat(outboxMessage.get().getPayload())
                 .contains(buildOrderStatusMessage(ORDER_CREATED, savedOrder.getId()));

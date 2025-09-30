@@ -4,6 +4,8 @@ import com.example.slimestore.jpa.Order;
 import com.example.slimestore.jpa.OrderProduct;
 import com.example.slimestore.jpa.Product;
 import com.example.slimestore.model.order.OrderDto;
+import com.example.slimestore.model.orderproduct.OrderProductDto;
+import com.example.slimestore.model.product.ProductDto;
 import com.example.slimestore.repository.OrderRepository;
 import com.example.slimestore.repository.OutboxMessageRepository;
 import com.example.slimestore.scheduler.OutboxRelayerScheduler;
@@ -111,13 +113,13 @@ class OrderServiceIntegrationTest {
     @Description("given order with five products when create new order then order saved to db and kafka message sent")
     void testCreateOrderWithFiveItems() {
         // GIVEN
-        Order order = new Order();
-        order.setCustomerName("Ivan Ivanov");
-        order.setOrderProducts(createOrderProducts(order,
+        OrderDto orderDto = new OrderDto();
+        orderDto.setCustomerName("Ivan Ivanov");
+        orderDto.setOrderProducts(createOrderProducts(
                 "Galaxy Slime", 1, "Glitter Slime", 2, "Cloud Slime", 1, "Fluffy Slime", 3, "Butter Slime", 1));
 
         // WHEN
-        ResponseEntity<OrderDto> response = restTemplate.postForEntity("/api/orders", order, OrderDto.class);
+        ResponseEntity<OrderDto> response = restTemplate.postForEntity("/api/orders", orderDto, OrderDto.class);
         outboxRelayerScheduler.processOutboxMessages();
 
         // THEN
@@ -183,19 +185,18 @@ class OrderServiceIntegrationTest {
         assertThat(response.getBody().size()).isEqualTo(2);
     }
 
-    private List<OrderProduct> createOrderProducts(Order order, Object... args) {
-        List<OrderProduct> items = new ArrayList<>();
+    private List<OrderProductDto> createOrderProducts(Object... args) {
+        List<OrderProductDto> items = new ArrayList<>();
         for (int i = 0; i < args.length; i += 2) {
             String productName = (String) args[i];
             int quantity = (Integer) args[i + 1];
 
-            Product product = new Product();
+            ProductDto product = new ProductDto();
             product.setName(productName);
-            OrderProduct item = new OrderProduct();
-            item.setOrder(order);
-            item.setProduct(product);
-            item.setQuantity(quantity);
-            items.add(item);
+            OrderProductDto orderProductDto = new OrderProductDto();
+            orderProductDto.setProduct(product);
+            orderProductDto.setQuantity(quantity);
+            items.add(orderProductDto);
         }
         return items;
     }

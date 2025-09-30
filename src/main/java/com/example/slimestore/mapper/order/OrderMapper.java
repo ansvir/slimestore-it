@@ -6,7 +6,7 @@ import com.example.slimestore.model.order.OrderDto;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
-@Mapper(componentModel = "spring", uses = { OrderProductMapper.class })
+@Mapper(uses = { OrderProductMapper.class })
 public interface OrderMapper {
 
     @Mapping(target = "orderProducts", source = "orderProducts")
